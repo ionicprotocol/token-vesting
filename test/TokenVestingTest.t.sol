@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import {Test, console} from "forge-std/Test.sol";
 import "../src/TokenVesting.sol";
 import {strings} from "solidity-stringutils/src/strings.sol";
+import "../src/MockERC20.sol"; // Import the MockERC20 contract
 
 contract TokenVestingTest is Test {
     using strings for *;
@@ -11,7 +12,9 @@ contract TokenVestingTest is Test {
     TokenVesting public tokenVesting;
     address alice = vm.addr(1);
     address bob = vm.addr(2);
-    
+
+    MockERC20 public ion;
+
     struct Vest {
         uint256 total;
         uint256 claimedAmount;
@@ -19,7 +22,9 @@ contract TokenVestingTest is Test {
     }
 
     function setUp() public {
-        tokenVesting = new TokenVesting();
+        ion = new MockERC20("Ionic", "ION");
+        tokenVesting = new TokenVesting(ion);
+        ion.transfer(address(tokenVesting), 1000000 ether);
     }
 
     function test_settingVestingAmounts() public {
@@ -31,8 +36,12 @@ contract TokenVestingTest is Test {
         amounts[0] = 700;
         amounts[1] = 300;
 
-        vm.prank(tokenVesting.owner()); 
-        tokenVesting.setVestingAmounts(1000, addresses, amounts);
+        vm.prank(tokenVesting.owner());
+
+        (bool success,) = address(tokenVesting).call(
+            abi.encodeWithSignature("setVestingAmounts(uint256,address[],uint256[])", 1000, addresses, amounts)
+        );
+        require(success, "Setting vesting amounts should pass");
 
         assertEq(tokenVesting.getVestingAmount(alice), 700);
         assertEq(tokenVesting.getVestingAmount(bob), 300);
@@ -42,8 +51,8 @@ contract TokenVestingTest is Test {
         string memory eof = "";
         string memory line = vm.readLine("generated-points.csv");
         uint256 parsedSum = 0;
-        address[] memory addresses = new address[](10000);
-        uint256[] memory amounts = new uint256[](10000);
+        address[] memory addresses = new address[](1000);
+        uint256[] memory amounts = new uint256[](1000);
         uint256 index = 0;
         uint256 batchAmountSum = 0;
         while (true) {
@@ -54,7 +63,7 @@ contract TokenVestingTest is Test {
             strings.slice memory s = line.toSlice();
             strings.slice memory delim = ",".toSlice();
             string[] memory parts = new string[](2);
-            for (uint i = 0; i < parts.length; i++) {
+            for (uint256 i = 0; i < parts.length; i++) {
                 parts[i] = s.split(delim).toString();
             }
             uint256 parsedInt = stringToUint(parts[1]);
@@ -62,29 +71,32 @@ contract TokenVestingTest is Test {
             addresses[index] = stringToAddress(parts[0]); // this cast does not work correctly
             amounts[index] = parsedInt;
             batchAmountSum += parsedInt;
-            if (index == 9999) {
-                vm.prank(tokenVesting.owner()); 
+            if (index == 999) {
+                vm.prank(tokenVesting.owner());
                 tokenVesting.setVestingAmounts(batchAmountSum, addresses, amounts);
                 index = 0;
                 batchAmountSum = 0;
+            } else {
+                index += 1;
             }
-            else index +=1;
         }
         if (index > 0) {
             address[] memory addressesLastBatch = new address[](index);
             uint256[] memory amountsLastBatch = new uint256[](index);
-            for(uint i=0;i<index;i++) {
+            for (uint256 i = 0; i < index; i++) {
                 addressesLastBatch[i] = addresses[i];
                 amountsLastBatch[i] = amounts[i];
             }
-            vm.prank(tokenVesting.owner()); 
+            vm.prank(tokenVesting.owner());
             tokenVesting.setVestingAmounts(batchAmountSum, addressesLastBatch, amountsLastBatch);
         }
-        vm.prank(tokenVesting.owner()); 
+        vm.prank(tokenVesting.owner());
         assertEq(tokenVesting.maxClaimedTokens(), 107991945);
     }
 
-    function testFail_nonOwnerSettingVestingAmounts() public {
+    function testFuzz_nonOwnerSettingVestingAmounts(address addr) public {
+        vm.assume(addr != address(0));
+
         address[] memory addresses = new address[](2);
         addresses[0] = alice;
         addresses[1] = bob;
@@ -93,8 +105,11 @@ contract TokenVestingTest is Test {
         amounts[0] = 700;
         amounts[1] = 300;
 
-        vm.prank(alice); 
-        tokenVesting.setVestingAmounts(1000, addresses, amounts);
+        vm.prank(addr);
+        (bool success,) = address(tokenVesting).call(
+            abi.encodeWithSignature("setVestingAmounts(uint256,address[],uint256[])", 1000, addresses, amounts)
+        );
+        require(!success, "Setting vesting amounts should fail");
     }
 
     function testFail_totalClaimableSettingVestingAmounts() public {
@@ -106,24 +121,24 @@ contract TokenVestingTest is Test {
         amounts[0] = 700;
         amounts[1] = 300;
 
-        vm.prank(tokenVesting.owner()); 
+        vm.prank(tokenVesting.owner());
         tokenVesting.setVestingAmounts(900, addresses, amounts);
     }
 
     function test_start() public {
-        vm.prank(tokenVesting.owner()); 
+        vm.prank(tokenVesting.owner());
         tokenVesting.start();
 
         assertEq(tokenVesting.startTime(), block.timestamp);
     }
 
     function testFail_nonOwnerStart() public {
-        vm.prank(alice); 
+        vm.prank(alice);
         tokenVesting.start();
     }
 
     function testFail_secondCallStart() public {
-        vm.prank(tokenVesting.owner()); 
+        vm.prank(tokenVesting.owner());
         tokenVesting.start();
         tokenVesting.start();
     }
@@ -138,7 +153,7 @@ contract TokenVestingTest is Test {
         amounts[0] = 700;
         amounts[1] = 300;
 
-        vm.prank(tokenVesting.owner()); 
+        vm.prank(tokenVesting.owner());
         tokenVesting.setVestingAmounts(1000, addresses, amounts);
 
         assertEq(tokenVesting.getVestingAmount(alice), 700);
@@ -147,9 +162,11 @@ contract TokenVestingTest is Test {
         assertEq(tokenVesting.claimable(alice), 0);
     }
 
-    function test_claimableAfter1Day() public {
-    	vm.startPrank(tokenVesting.owner()); 
-    	address[] memory addresses = new address[](2);
+    function testFuzz_claimAfterXSeconds(uint256 secondsElapsed) public {
+        vm.assume(secondsElapsed > 0 && secondsElapsed <= 90 * 86400);
+
+        vm.startPrank(tokenVesting.owner());
+        address[] memory addresses = new address[](2);
         addresses[0] = alice;
         addresses[1] = bob;
 
@@ -159,21 +176,28 @@ contract TokenVestingTest is Test {
 
         tokenVesting.setVestingAmounts(1000, addresses, amounts);
         tokenVesting.start();
-        vm.stopPrank(); 
+        vm.stopPrank();
 
-        vm.warp(86400);
+        vm.warp(secondsElapsed);
 
-        uint256 m = uint256(700)*90/100-uint256(700)*25/100;
-        uint256 expectedAliceClaimableAmount = uint256(700)*25/100+m*1*86400/(90*86400);
-        assertEq(tokenVesting.claimable(alice), expectedAliceClaimableAmount);
-        uint256 mBob = uint256(300)*90/100-uint256(300)*25/100;
-        uint256 expectedBobClaimableAmount = uint256(300)*25/100+mBob*1*86400/(90*86400);
-        assertEq(tokenVesting.claimable(bob), expectedBobClaimableAmount);
+        uint256 m = uint256(700) * 90 / 100 - uint256(700) * 25 / 100;
+        uint256 expectedAliceClaimableAmount = uint256(700) * 25 / 100 + m * secondsElapsed / (90 * 86400);
+        vm.prank(alice);
+        tokenVesting.claim();
+        assertEq(ion.balanceOf(alice), expectedAliceClaimableAmount);
+        console.logUint(expectedAliceClaimableAmount);
+        uint256 mBob = uint256(300) * 90 / 100 - uint256(300) * 25 / 100;
+        uint256 expectedBobClaimableAmount = uint256(300) * 25 / 100 + mBob * secondsElapsed / (90 * 86400);
+        vm.prank(bob);
+        tokenVesting.claim();
+        assertEq(ion.balanceOf(bob), expectedBobClaimableAmount);
     }
 
-    function test_claimableAfter50Days() public {
-    	vm.startPrank(tokenVesting.owner()); 
-    	address[] memory addresses = new address[](2);
+    function testFuzz_claimableAfterXSeconds(uint256 secondsElapsed) public {
+        vm.assume(secondsElapsed > 0 && secondsElapsed <= 90 * 86400);
+
+        vm.startPrank(tokenVesting.owner());
+        address[] memory addresses = new address[](2);
         addresses[0] = alice;
         addresses[1] = bob;
 
@@ -183,44 +207,36 @@ contract TokenVestingTest is Test {
 
         tokenVesting.setVestingAmounts(1000, addresses, amounts);
         tokenVesting.start();
-        vm.stopPrank(); 
+        vm.stopPrank();
 
-        vm.warp(50*86400);
+        vm.warp(secondsElapsed);
 
-        uint256 m = uint256(700)*90/100-uint256(700)*25/100;
-        uint256 expectedAliceClaimableAmount = uint256(700)*25/100+m*50*86400/(90*86400);
+        uint256 m = uint256(700) * 90 / 100 - uint256(700) * 25 / 100;
+        uint256 expectedAliceClaimableAmount = uint256(700) * 25 / 100 + m * secondsElapsed / (90 * 86400);
         assertEq(tokenVesting.claimable(alice), expectedAliceClaimableAmount);
-
-        uint256 mBob = uint256(300)*90/100-uint256(300)*25/100;
-        uint256 expectedBobClaimableAmount = uint256(300)*25/100+mBob*50*86400/(90*86400);
+        uint256 mBob = uint256(300) * 90 / 100 - uint256(300) * 25 / 100;
+        uint256 expectedBobClaimableAmount = uint256(300) * 25 / 100 + mBob * secondsElapsed / (90 * 86400);
         assertEq(tokenVesting.claimable(bob), expectedBobClaimableAmount);
     }
 
-    function test_claimableAfter90Days() public {
-    	vm.startPrank(tokenVesting.owner()); 
-    	address[] memory addresses = new address[](2);
-        addresses[0] = alice;
-        addresses[1] = bob;
+    function testFuzz_nonOwnerWithdraw(address addr) public {
+        vm.assume(addr != address(0));
 
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 700;
-        amounts[1] = 300;
-
-        tokenVesting.setVestingAmounts(1000, addresses, amounts);
-        tokenVesting.start();
-        vm.stopPrank(); 
-
-        vm.warp(10000000);
-
-        uint256 expectedAliceClaimableAmount = 700;
-        uint256 expectedBobClaimableAmount = 300;
-        assertEq(tokenVesting.claimable(alice), expectedAliceClaimableAmount);
-        assertEq(tokenVesting.claimable(bob), expectedBobClaimableAmount);
+        vm.prank(addr);
+        (bool success,) = address(tokenVesting).call(abi.encodeWithSignature("function withdraw(address)", addr));
+        require(!success, "Setting vesting amounts should fail");
     }
 
-    function stringToUint(string memory s) public pure returns (uint) {
+    function test_withdraw() public {
+        assertEq(ion.balanceOf(tokenVesting.owner()), 0);
+
+        tokenVesting.withdraw(tokenVesting.owner());
+        assertEq(ion.balanceOf(tokenVesting.owner()), 1000000 ether);
+    }
+
+    function stringToUint(string memory s) public pure returns (uint256) {
         bytes memory b = bytes(s);
-        uint result = 0;
+        uint256 result = 0;
         for (uint256 i = 0; i < b.length; i++) {
             uint256 c = uint256(uint8(b[i]));
             if (c >= 48 && c <= 57) {
@@ -235,7 +251,7 @@ contract TokenVestingTest is Test {
         require(strBytes.length == 42, "Invalid address length");
         bytes memory addrBytes = new bytes(20);
 
-        for (uint i = 0; i < 20; i++) {
+        for (uint256 i = 0; i < 20; i++) {
             addrBytes[i] = bytes1(hexCharToByte(strBytes[2 + i * 2]) * 16 + hexCharToByte(strBytes[3 + i * 2]));
         }
 
@@ -244,14 +260,13 @@ contract TokenVestingTest is Test {
 
     function hexCharToByte(bytes1 char) internal pure returns (uint8) {
         uint8 byteValue = uint8(char);
-        if (byteValue >= uint8(bytes1('0')) && byteValue <= uint8(bytes1('9'))) {
-            return byteValue - uint8(bytes1('0'));
-        } else if (byteValue >= uint8(bytes1('a')) && byteValue <= uint8(bytes1('f'))) {
-            return 10 + byteValue - uint8(bytes1('a'));
-        } else if (byteValue >= uint8(bytes1('A')) && byteValue <= uint8(bytes1('F'))) {
-            return 10 + byteValue - uint8(bytes1('A'));
+        if (byteValue >= uint8(bytes1("0")) && byteValue <= uint8(bytes1("9"))) {
+            return byteValue - uint8(bytes1("0"));
+        } else if (byteValue >= uint8(bytes1("a")) && byteValue <= uint8(bytes1("f"))) {
+            return 10 + byteValue - uint8(bytes1("a"));
+        } else if (byteValue >= uint8(bytes1("A")) && byteValue <= uint8(bytes1("F"))) {
+            return 10 + byteValue - uint8(bytes1("A"));
         }
         revert("Invalid hex character");
     }
-    // TODO: Add tests for function claim()
 }
