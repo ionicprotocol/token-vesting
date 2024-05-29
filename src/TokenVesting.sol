@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Use OpenZeppelin's I
 
 contract TokenVesting is Ownable {
     uint256 public startTime;
-    uint256 public constant duration = 86400 * 90;
-    uint256 public maxClaimedTokens;
+    uint256 public constant duration = 90 days;
+    uint256 public maxClaimableTokens;
     uint256 public claimedTokens;
     IERC20 public ion;
 
@@ -35,7 +35,7 @@ contract TokenVesting is Ownable {
             vests[_receivers[i]].total = _amounts[i];
         }
         require(_claimable == _totalClaimable);
-        maxClaimedTokens += _claimable;
+        maxClaimableTokens += _claimable;
     }
 
     function start() external onlyOwner {
@@ -65,6 +65,7 @@ contract TokenVesting is Ownable {
         require(startTime != 0);
         Vest storage v = vests[msg.sender];
         require(!v.isClaimed, "User already claimed.");
+        v.isClaimed = true;
         uint256 elapsedTime = block.timestamp - startTime;
         uint256 _claimable;
         if (elapsedTime > duration) {
@@ -76,8 +77,8 @@ contract TokenVesting is Ownable {
         v.claimedAmount = _claimable;
         claimedTokens += _claimable;
         require(v.total - _claimable >= 0);
-        maxClaimedTokens -= (v.total - _claimable);
-        require(claimedTokens <= maxClaimedTokens);
+        maxClaimableTokens -= (v.total - _claimable);
+        require(claimedTokens <= maxClaimableTokens);
         ion.transfer(msg.sender, _claimable);
     }
 

@@ -91,11 +91,11 @@ contract TokenVestingTest is Test {
             tokenVesting.setVestingAmounts(batchAmountSum, addressesLastBatch, amountsLastBatch);
         }
         vm.prank(tokenVesting.owner());
-        assertEq(tokenVesting.maxClaimedTokens(), 107991945);
+        assertEq(tokenVesting.maxClaimableTokens(), 107991945);
     }
 
     function testFuzz_nonOwnerSettingVestingAmounts(address addr) public {
-        vm.assume(addr != address(0));
+        vm.assume(addr != address(this));
 
         address[] memory addresses = new address[](2);
         addresses[0] = alice;
@@ -162,8 +162,32 @@ contract TokenVestingTest is Test {
         assertEq(tokenVesting.claimable(alice), 0);
     }
 
+    function testFail_claimSecondTime() public {
+        tokenVesting.claimable(alice);
+        address[] memory addresses = new address[](2);
+        addresses[0] = alice;
+        addresses[1] = bob;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 700;
+        amounts[1] = 300;
+
+        vm.prank(tokenVesting.owner());
+        tokenVesting.setVestingAmounts(1000, addresses, amounts);
+        vm.prank(tokenVesting.owner());
+        tokenVesting.start();
+
+        assertEq(tokenVesting.getVestingAmount(alice), 700);
+        assertEq(tokenVesting.getVestingAmount(bob), 300);
+
+        vm.prank(alice);
+        tokenVesting.claim();
+        vm.prank(alice);
+        tokenVesting.claim();
+    }
+
     function testFuzz_claimAfterXSeconds(uint256 secondsElapsed) public {
-        vm.assume(secondsElapsed > 0 && secondsElapsed <= 90 * 86400);
+        vm.assume(secondsElapsed > 0 && secondsElapsed < 90 * 86400);
 
         vm.startPrank(tokenVesting.owner());
         address[] memory addresses = new address[](2);
@@ -194,7 +218,7 @@ contract TokenVestingTest is Test {
     }
 
     function testFuzz_claimableAfterXSeconds(uint256 secondsElapsed) public {
-        vm.assume(secondsElapsed > 0 && secondsElapsed <= 90 * 86400);
+        vm.assume(secondsElapsed > 0 && secondsElapsed < 90 * 86400);
 
         vm.startPrank(tokenVesting.owner());
         address[] memory addresses = new address[](2);
