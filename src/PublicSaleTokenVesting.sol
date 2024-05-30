@@ -4,17 +4,17 @@ pragma solidity >=0.8.0;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Use OpenZeppelin's IERC20 interface
 
-contract TokenVesting is Ownable {
+contract PublicSaleTokenVesting is Ownable {
+    uint256 public constant duration = 100 days;
     uint256 public startTime;
-    uint256 public constant duration = 90 days;
     uint256 public maxClaimableTokens;
     uint256 public totalClaimedTokens;
     IERC20 public ion;
 
+
     struct Vest {
         uint256 total;
         uint256 claimedAmount;
-        bool isClaimed;
     }
 
     mapping(address => Vest) public vests;
@@ -38,13 +38,17 @@ contract TokenVesting is Ownable {
         maxClaimableTokens += _claimable;
     }
 
-    function start() external onlyOwner {
+    function start(uint256 _startTime) external onlyOwner {
         require(startTime == 0);
-        startTime = block.timestamp;
+        startTime = _startTime;
     }
 
     function getVestingAmount(address _user) external view returns (uint256) {
         return vests[_user].total;
+    }
+
+    function getClaimedAmount(address _user) external view returns (uint256) {
+        return vests[_user].claimedAmount;
     }
 
     function claimable(address _claimer) external view returns (uint256) {
@@ -53,10 +57,9 @@ contract TokenVesting is Ownable {
         uint256 elapsedTime = block.timestamp - startTime;
         uint256 _claimable;
         if (elapsedTime > duration) {
-            _claimable = v.total;
+            _claimable = v.total - v.claimedAmount;
         } else {
-            uint256 m = v.total * 90 / 100 - v.total * 25 / 100;
-            _claimable = v.total * 25 / 100 + m * elapsedTime / duration;
+            _claimable = v.total * elapsedTime / duration - v.claimedAmount;
         }
         return _claimable;
     }
@@ -64,20 +67,16 @@ contract TokenVesting is Ownable {
     function claim() external {
         require(startTime != 0);
         Vest storage v = vests[msg.sender];
-        require(!v.isClaimed, "User already claimed.");
-        v.isClaimed = true;
         uint256 elapsedTime = block.timestamp - startTime;
         uint256 _claimable;
         if (elapsedTime > duration) {
-            _claimable = v.total;
+            _claimable = v.total - v.claimedAmount;
         } else {
-            uint256 m = v.total * 90 / 100 - v.total * 25 / 100;
-            _claimable = v.total * 25 / 100 + m * elapsedTime / duration;
+            _claimable = v.total * elapsedTime / duration - v.claimedAmount;
         }
-        v.claimedAmount = _claimable;
+
+        v.claimedAmount += _claimable;
         totalClaimedTokens += _claimable;
-        require(v.total - _claimable >= 0);
-        maxClaimableTokens -= (v.total - _claimable);
         require(totalClaimedTokens <= maxClaimableTokens);
         ion.transfer(msg.sender, _claimable);
     }
