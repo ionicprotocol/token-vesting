@@ -23,8 +23,7 @@ type Row = {
 };
 
 const TOKEN_VESTING_MODE = "0xDA061A5D6fc9F3D40f6505ce38AEb8793A29eDE8";
-// const VESTED_AMOUNT_PER_ADDRESS = parseEther("26666.4");
-const VESTED_AMOUNT_PER_ADDRESS = 0n;
+const VESTED_AMOUNT_PER_ADDRESS = parseEther("26666.4");
 
 async function main() {
   const client = await hre.viem.getPublicClient();
