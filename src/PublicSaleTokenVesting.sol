@@ -4,13 +4,13 @@ pragma solidity >=0.8.0;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Use OpenZeppelin's IERC20 interface
 
-contract TokenVesting is Ownable {
+contract PublicSaleTokenVesting is Ownable {
     event AdminWithdrawal(address indexed account, uint256 reward);
     event VestingClaimed(address indexed account, uint256 reward);
     event VestingStarted(uint256 startTime);
 
+    uint256 public constant duration = 100 days;
     uint256 public startTime;
-    uint256 public constant duration = 90 days;
     uint256 public maxClaimableTokens;
     uint256 public totalClaimedTokens;
     IERC20 public ion;
@@ -18,7 +18,6 @@ contract TokenVesting is Ownable {
     struct Vest {
         uint256 total;
         uint256 claimedAmount;
-        bool isClaimed;
     }
 
     mapping(address => Vest) public vests;
@@ -42,9 +41,9 @@ contract TokenVesting is Ownable {
         maxClaimableTokens += _claimable;
     }
 
-    function start() external onlyOwner {
+    function start(uint256 _startTime) external onlyOwner {
         require(startTime == 0);
-        startTime = block.timestamp;
+        startTime = _startTime;
         emit VestingStarted(startTime);
     }
 
@@ -52,17 +51,21 @@ contract TokenVesting is Ownable {
         return vests[_user].total;
     }
 
-    function calculateClaimable(uint256 total) internal view returns (uint256) {
+    function getClaimedAmount(address _user) external view returns (uint256) {
+        return vests[_user].claimedAmount;
+    }
+
+    function calculateClaimable(uint256 total, uint256 claimedAmount) internal view returns (uint256) {
         uint256 elapsedTime = block.timestamp - startTime;
         uint256 _claimable;
         if (elapsedTime > duration) {
-            // If the elapsed time exceeds the duration, all tokens are fully vested
-            _claimable = total;
+            // If the elapsed time exceeds the vesting duration, all tokens should be fully vested
+            // The claimable amount is the total vested amount minus the already claimed amount
+            _claimable = total - claimedAmount;
         } else {
-            // If the elapsed time is less then 90 days, take 65% of total vested amount
-            uint256 m = total * 65 / 100;
-            // Initially 25% of tokens are claimable and 65% is released proportional to time passed
-            _claimable = total * 25 / 100 + m * elapsedTime / duration;
+            // If the elapsed time is within the vesting duration
+            // Calculate the proportional vested amount based on the elapsed time
+            _claimable = total * elapsedTime / duration - claimedAmount;
         }
         return _claimable;
     }
@@ -70,20 +73,17 @@ contract TokenVesting is Ownable {
     function claimable(address _claimer) external view returns (uint256) {
         if (startTime == 0) return 0;
         Vest storage v = vests[_claimer];
-        uint256 _claimable = calculateClaimable(v.total);
+        uint256 _claimable = calculateClaimable(v.total, v.claimedAmount);
         return _claimable;
     }
 
     function claim() external {
         require(startTime != 0);
         Vest storage v = vests[msg.sender];
-        require(!v.isClaimed, "User already claimed.");
-        v.isClaimed = true;
-        uint256 _claimable = calculateClaimable(v.total);
-        v.claimedAmount = _claimable;
+        uint256 _claimable = calculateClaimable(v.total, v.claimedAmount);
+
+        v.claimedAmount += _claimable;
         totalClaimedTokens += _claimable;
-        require(v.total - _claimable >= 0);
-        maxClaimableTokens -= (v.total - _claimable);
         require(totalClaimedTokens <= maxClaimableTokens);
         ion.transfer(msg.sender, _claimable);
         emit VestingClaimed(msg.sender, _claimable);
