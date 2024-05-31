@@ -241,7 +241,8 @@ contract TokenVestingTest is Test {
         vm.assume(addr != address(0));
 
         vm.prank(addr);
-        (bool success,) = address(publicSaleTokenVesting).call(abi.encodeWithSignature("function withdraw(address)", addr));
+        (bool success,) =
+            address(publicSaleTokenVesting).call(abi.encodeWithSignature("function withdraw(address)", addr));
         require(!success, "Setting vesting amounts should fail");
     }
 

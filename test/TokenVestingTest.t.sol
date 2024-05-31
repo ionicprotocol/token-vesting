@@ -204,13 +204,13 @@ contract TokenVestingTest is Test {
 
         vm.warp(secondsElapsed);
 
-        uint256 m = uint256(700) * 90 / 100 - uint256(700) * 25 / 100;
+        uint256 m = uint256(700) * 65 / 100;
         uint256 expectedAliceClaimableAmount = uint256(700) * 25 / 100 + m * secondsElapsed / (90 * 86400);
         vm.prank(alice);
         tokenVesting.claim();
         assertEq(ion.balanceOf(alice), expectedAliceClaimableAmount);
         console.logUint(expectedAliceClaimableAmount);
-        uint256 mBob = uint256(300) * 90 / 100 - uint256(300) * 25 / 100;
+        uint256 mBob = uint256(300) * 65 / 100;
         uint256 expectedBobClaimableAmount = uint256(300) * 25 / 100 + mBob * secondsElapsed / (90 * 86400);
         vm.prank(bob);
         tokenVesting.claim();
@@ -235,10 +235,10 @@ contract TokenVestingTest is Test {
 
         vm.warp(secondsElapsed);
 
-        uint256 m = uint256(700) * 90 / 100 - uint256(700) * 25 / 100;
+        uint256 m = uint256(700) * 65 / 100;
         uint256 expectedAliceClaimableAmount = uint256(700) * 25 / 100 + m * secondsElapsed / (90 * 86400);
         assertEq(tokenVesting.claimable(alice), expectedAliceClaimableAmount);
-        uint256 mBob = uint256(300) * 90 / 100 - uint256(300) * 25 / 100;
+        uint256 mBob = uint256(300) * 65 / 100;
         uint256 expectedBobClaimableAmount = uint256(300) * 25 / 100 + mBob * secondsElapsed / (90 * 86400);
         assertEq(tokenVesting.claimable(bob), expectedBobClaimableAmount);
     }
