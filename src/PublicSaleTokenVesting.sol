@@ -9,7 +9,7 @@ contract PublicSaleTokenVesting is Ownable {
     event VestingClaimed(address indexed account, uint256 reward);
     event VestingStarted(uint256 startTime);
 
-    uint256 public constant duration = 100 days;
+    uint256 public constant duration = 80 days;
     uint256 public startTime;
     uint256 public maxClaimableTokens;
     uint256 public totalClaimedTokens;

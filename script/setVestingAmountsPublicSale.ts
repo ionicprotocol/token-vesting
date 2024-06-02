@@ -22,7 +22,7 @@ type Row = {
   TxDateClosingPrice: string;
 };
 
-const TOKEN_VESTING_MODE = "0xDA061A5D6fc9F3D40f6505ce38AEb8793A29eDE8";
+const TOKEN_VESTING_MODE = "0x731D22ed440a5BCfC140440AF441B76Baa536821";
 const VESTED_AMOUNT_PER_ADDRESS = parseEther("26666.4");
 
 async function main() {
