@@ -42,9 +42,9 @@ contract TokenVesting is Ownable {
         maxClaimableTokens += _claimable;
     }
 
-    function start() external onlyOwner {
+    function start(uint256 _startTime) external onlyOwner {
         require(startTime == 0);
-        startTime = block.timestamp;
+        startTime = _startTime;
         emit VestingStarted(startTime);
     }
 

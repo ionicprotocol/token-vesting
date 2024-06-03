@@ -12,7 +12,7 @@ type Row = {
   vested_amount: string;
 };
 
-const TOKEN_VESTING_MODE = "0x93E63535CB8b85239D4D8F40a571e81dAb9409d9";
+const TOKEN_VESTING_MODE = "0xa7BC89F9Bcd2E6565c250182767f20e2aC89bc7B";
 
 async function main() {
   const client = await hre.viem.getPublicClient();
@@ -23,7 +23,7 @@ async function main() {
   }) as Row[];
 
   // console.log("csv: ", csv);
-  const batch: Row[] = [];
+  let batch: Row[] = [];
   const batches: Row[][] = [];
   let sum = 0n;
   csv.forEach((row) => {
@@ -31,7 +31,7 @@ async function main() {
     batch.push(row);
     if (batch.length === BATCH_SIZE) {
       batches.push(batch);
-      batch.length = 0;
+      batch = [];
     }
   });
   console.log("num batches: ", batches.length);
@@ -42,10 +42,18 @@ async function main() {
     TOKEN_VESTING_MODE
   );
   for (const batch of batches) {
+    // const vests = await Promise.all(
+    //   batch.map(async (row) => {
+    //     const vest = (await tokenVesting.read.vests([row.user])) as [bigint];
+    //     return { ...row, vestAmount: vest[0] };
+    //   })
+    // );
+    // const _batch = vests.filter((row) => row.vestAmount === 0n);
+    const _batch = batch;
     const tx = await tokenVesting.write.setVestingAmounts([
-      batch.reduce((sum, row) => (sum += BigInt(row.vested_amount)), 0n),
-      batch.map((row) => row.user),
-      batch.map((row) => BigInt(row.vested_amount)),
+      _batch.reduce((sum, row) => (sum += BigInt(row.vested_amount)), 0n),
+      _batch.map((row) => row.user),
+      _batch.map((row) => BigInt(row.vested_amount)),
     ]);
     const receipt = await client.waitForTransactionReceipt({ hash: tx });
     console.log("receipt.transactionHash: ", receipt.transactionHash);
