@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // Use OpenZeppelin's IERC20 interface
 
 contract TokenVesting is Ownable {
-    event AdminWithdrawal(address indexed account, uint256 reward);
+    event AdminWithdrawal(address indexed account, uint256 amount);
     event VestingClaimed(address indexed account, uint256 reward);
     event VestingStarted(uint256 startTime);
 
