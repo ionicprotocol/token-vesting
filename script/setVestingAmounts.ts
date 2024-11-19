@@ -11,7 +11,7 @@ const BATCH_SIZE = 1000;
 // Supabase configuration
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
-const TABLE_NAME = "airdrop_szn2_dummy";
+const TABLE_NAME = "airdrop_season_2";
 type Row = {
   claimed: any;
   user: Address;
@@ -34,6 +34,7 @@ async function main() {
     const { data: rows, error, count } = await supabase
       .from(TABLE_NAME)
       .select('*', { count: 'exact' })
+      .eq('claimed', true)
       .range(from, from + PAGE_SIZE - 1)
       .throwOnError();
     if (error) {
@@ -124,7 +125,7 @@ async function main() {
   for (const batch of batches) {
     const vests = await Promise.all(
       batch.map(async (row) => {
-        const vest = await tokenVesting.read.vests([row.user]);
+        const vest = (await tokenVesting.read.vests([row.user])) as [bigint];
         return { 
           ...row, 
           vestAmount: vest[0]
@@ -147,7 +148,7 @@ async function main() {
         .filter(row => row.claimed === true && row.distributed === true)
         .map((row) => ({
           user: row.user,
-          vestingSet: true
+          vesting_set: true
       }));
 
       const { error } = await supabase
