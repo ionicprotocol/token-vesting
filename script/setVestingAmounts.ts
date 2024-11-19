@@ -19,6 +19,7 @@ type Row = {
   initial_ion_sent: string | null;
   remaining_ion: string | null;
   distributed: boolean;
+  vesting_set: boolean;
 };
 const TOKEN_VESTING_MODE = "0x3931803bE318676C8F32A40F97448b4B26bf20a1";
 async function main() {
@@ -95,12 +96,15 @@ async function main() {
     .from(TABLE_NAME)
     .select('*')
     .eq('claimed', true)
+    .eq('vesting_set', false) // Only get rows where vesting hasn't been set yet
     .throwOnError();
 
   if (fetchError) {
     console.error("Error fetching data:", fetchError);
     process.exit(1);
   }
+
+  console.log(`Found ${allRows?.length || 0} records that need vesting set up`);
 
   // Create batches
   allRows?.forEach((row: Row) => {
@@ -123,45 +127,55 @@ async function main() {
 
   let i = 1;
   for (const batch of batches) {
-    const vests = await Promise.all(
-      batch.map(async (row) => {
-        const vest = (await tokenVesting.read.vests([row.user])) as [bigint];
-        return { 
-          ...row, 
-          vestAmount: vest[0]
-        };
-      })
-    );
+    console.log(`Processing batch ${i} of ${batches.length}`);
+    try {
+      const vests = await Promise.all(
+        batch.map(async (row) => {
+          const vest = (await tokenVesting.read.vests([row.user])) as [bigint];
+          // Calculate vested amount for this user
+          const vestedAmount = parseFloat(row.ion_amount) * 0.84;
+          const vestedAmountWei = BigInt(Math.floor(vestedAmount * 1e18));
+          return { 
+            ...row, 
+            vestAmount: vest[0],
+            vestedAmountWei
+          };
+        })
+      );
 
-    const _batch = vests.filter((row) => row.vestAmount === 0n);
-    if (_batch.length > 0) {
-      const tx = await tokenVesting.write.setVestingAmounts([
-        _batch.reduce((sum, row) => sum + row.vestAmount, 0n),
-        _batch.map((row) => row.user),
-        _batch.map((row) => row.vestAmount),
-      ]);
-      const receipt = await (await hre.viem.getPublicClient()).waitForTransactionReceipt({ hash: tx });
-      console.log("Transaction hash: ", receipt.transactionHash);
+      const _batch = vests.filter((row) => row.vestAmount === 0n);
+      if (_batch.length > 0) {
+        const tx = await tokenVesting.write.setVestingAmounts([
+          _batch.reduce((sum, row) => sum + row.vestedAmountWei, 0n), // Use calculated vested amount
+          _batch.map((row) => row.user),
+          _batch.map((row) => row.vestedAmountWei), // Use calculated vested amount
+        ]);
+        const receipt = await (await hre.viem.getPublicClient()).waitForTransactionReceipt({ hash: tx });
+        console.log("Transaction hash: ", receipt.transactionHash);
 
-      // Update Supabase for successful vesting setup
-      const updates = _batch
-        .filter(row => row.claimed === true && row.distributed === true)
-        .map((row) => ({
-          user: row.user,
-          vesting_set: true
-      }));
+        // Update Supabase for successful vesting setup
+        const updates = _batch
+          .filter(row => row.claimed === true && row.distributed === true)
+          .map((row) => ({
+            user: row.user,
+            vesting_set: true
+        }));
 
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .upsert(updates, { onConflict: 'user' });
+        const { error } = await supabase
+          .from(TABLE_NAME)
+          .upsert(updates, { onConflict: 'user' });
 
-      if (error) {
-        console.error("Error updating Supabase:", error);
+        if (error) {
+          console.error("Error updating Supabase:", error);
+        } else {
+          console.log(`Updated ${updates.length} records in Supabase`);
+        }
       } else {
-        console.log(`Updated ${updates.length} records in Supabase`);
+        console.log("No new vesting amounts to set for batch");
       }
-    } else {
-      console.log("No new vesting amounts to set for batch");
+    } catch (error) {
+      console.error(`Error processing batch ${i}:`, error);
+      console.log("Continuing with next batch...");
     }
     console.log("batch: ", i);
     i++;
