@@ -124,7 +124,7 @@ async function main() {
   for (const batch of batches) {
     const vests = await Promise.all(
       batch.map(async (row) => {
-        const vest = (await tokenVesting.read.vests([row.user])) as [bigint];
+        const vest = await tokenVesting.read.vests([row.user]);
         return { 
           ...row, 
           vestAmount: vest[0]
