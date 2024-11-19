@@ -96,7 +96,8 @@ async function main() {
     .from(TABLE_NAME)
     .select('*')
     .eq('claimed', true)
-    .eq('vesting_set', false) // Only get rows where vesting hasn't been set yet
+    .eq('distributed', true)
+    .eq('vesting_set', false)
     .throwOnError();
 
   if (fetchError) {
@@ -154,9 +155,7 @@ async function main() {
         console.log("Transaction hash: ", receipt.transactionHash);
 
         // Update Supabase for successful vesting setup
-        const updates = _batch
-          .filter(row => row.claimed === true && row.distributed === true)
-          .map((row) => ({
+        const updates = _batch.map((row) => ({
             user: row.user,
             vesting_set: true
         }));
