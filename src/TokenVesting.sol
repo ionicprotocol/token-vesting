@@ -34,7 +34,6 @@ contract TokenVesting is Ownable {
         require(_receivers.length == _amounts.length);
         uint256 _claimable;
         for (uint256 i = 0; i < _receivers.length; i++) {
-            require(vests[_receivers[i]].total == 0);
             _claimable += _amounts[i];
             vests[_receivers[i]].total = _amounts[i];
         }
