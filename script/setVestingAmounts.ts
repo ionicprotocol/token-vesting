@@ -6,7 +6,7 @@ import { mode } from 'viem/chains';
 import { createClient } from "@supabase/supabase-js";
 import { parse } from "csv-parse/sync";
 import fs from "fs";
-import { Address, formatEther } from "viem";
+import { Address, formatEther, parseEther } from "viem";
 const BATCH_SIZE = 1000;
 // Supabase configuration
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -52,22 +52,31 @@ async function main() {
     let batchLiquid = 0n;
     let batchVested = 0n;
     rows.forEach((row: Row) => {
-      // Only process if user has claimed (claimed is boolean)
       if (row.claimed === true) {
-        // Total amount from ion_amount
-        const amount = parseFloat(row.ion_amount);
-        const amountWei = BigInt(Math.floor(amount * 1e18));
-        batchAmount += amountWei;
-        totalAmount += amountWei;
-        // Use the pre-calculated values directly
-        const liquidAmount = parseFloat(row.ion_amount) * 0.16;
-        const liquidAmountWei = BigInt(Math.floor(liquidAmount * 1e18));
-        batchLiquid += liquidAmountWei;
-        totalLiquid += liquidAmountWei;
-        const vestedAmount = parseFloat(row.ion_amount) * 0.84;
-        const vestedAmountWei = BigInt(Math.floor(vestedAmount * 1e18));
-        batchVested += vestedAmountWei;
-        totalVested += vestedAmountWei;
+        // console.log('Row values:', {
+        //   ion_amount: row.ion_amount,
+        //   initial_ion_sent: row.initial_ion_sent,
+        //   remaining_ion: row.remaining_ion,
+        //   typeof_ion_amount: typeof row.ion_amount
+        // });
+
+        try {
+          // Use parseEther for precise decimal handling
+          const amountWei = parseEther(row.ion_amount.toString());
+          batchAmount += amountWei;
+          totalAmount += amountWei;
+
+          const liquidAmountWei = parseEther((row.initial_ion_sent || "0").toString());
+          batchLiquid += liquidAmountWei;
+          totalLiquid += liquidAmountWei;
+
+          const vestedAmountWei = parseEther((row.remaining_ion || "0").toString()); 
+          batchVested += vestedAmountWei;
+          totalVested += vestedAmountWei;
+        } catch (error) {
+          console.error('Error processing row:', error);
+          console.error('Problematic row:', row);
+        }
       }
     });
     console.log("Batch Summary:");
@@ -133,9 +142,7 @@ async function main() {
       const vests = await Promise.all(
         batch.map(async (row) => {
           const vest = (await tokenVesting.read.vests([row.user])) as [bigint];
-          // Calculate vested amount for this user
-          const vestedAmount = parseFloat(row.ion_amount) * 0.84;
-          const vestedAmountWei = BigInt(Math.floor(vestedAmount * 1e18));
+          const vestedAmountWei = parseEther((parseFloat(row.ion_amount) * 0.84).toString());
           return { 
             ...row, 
             vestAmount: vest[0],
